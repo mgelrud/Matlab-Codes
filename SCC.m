@@ -1,0 +1,195 @@
+%%
+% ------------------------------------------------------------------------
+%  SCC
+% ------------------------------------------------------------------------
+
+Lambda = zeros(n, 1);
+for t = 1 : n
+    if (t >= n_tilde) & (t <= n_bar)
+        Lambda(t) = 0.5  * lambda_const * mu_T * (timeline(t)^2 - t_tilde^2) ...
+            + lambda_const * log(T_0) * (timeline(t) - t_tilde);
+    elseif t > n_bar
+        Lambda(t) = lambda_max * timeline(t) - 0.5 * lambda_const * mu_T * (t_bar^2 + t_tilde^2) ...
+            - lambda_const * log(T_0) * t_tilde;
+    end    
+end 
+
+Lambda_diff = zeros(n, n); % dimensions t x s
+for t = 1 : n
+    for s = t : n
+        if t < n_tilde
+            if s < n_tilde
+                Lambda_diff(t, s) = 0;
+            elseif (s >= n_tilde) & (s <= n_bar)
+                Lambda_diff(t, s) = 0.5  * lambda_const * mu_T * (timeline(s)^2 - t_tilde^2) ...
+                    + lambda_const * log(T_0) * (timeline(s) - t_tilde);
+            else
+                Lambda_diff(t, s) = lambda_max * timeline(s) ...
+                    - 0.5  * lambda_const * mu_T * (t_tilde^2 + t_bar^2) ...
+                    - lambda_const * log(T_0) * t_tilde;
+            end    
+        elseif (t >= n_tilde) & (t <= n_bar)
+            if (s >= n_tilde) & (s <= n_bar)
+                Lambda_diff(t, s) = 0.5  * lambda_const * mu_T * (timeline(s)^2 - timeline(t)^2) ...
+                    + lambda_const * log(T_0) * (timeline(s) - timeline(t));
+            else
+                Lambda_diff(t, s) = lambda_max * timeline(s) ...
+                    - 0.5  * lambda_const * mu_T * (t_tilde^2 - timeline(t)^2) ...
+                    - lambda_const * log(T_0) * timeline(t);
+            end    
+        elseif t > n_bar
+            Lambda_diff(t, s) = lambda_max * (timeline(s) - timeline(t));
+        end 
+    end
+end 
+
+mu_U = (1 - gamma) .* mu - 0.5 .* (1 - gamma) .* gamma .* sigma^2;
+%%
+
+X_coef = 1 ./ (beta - mu_U - (exp((gamma - 1) .* Z) - 1) .* lambda_max);
+X = zeros(n, length(gamma));
+
+X(n_bar + 1 : end, :) = X_coef .* exp(- beta .* timeline(n_bar + 1 : end));
+
+t = timeline(n_tilde : n_bar);
+n_steps = 10000;
+limit_min = t;
+limit_max = t_bar;
+du = (limit_max - limit_min) ./ n_steps;
+
+X2_term1 = 0;
+s = limit_min;
+for i = 1 : n_steps
+    func = exp((mu_U - beta) .* s - mu_U .* timeline(n_tilde : n_bar) ...
+    + (exp((gamma - 1) .* Z) - 1) .* (0.5 .* lambda_const .* mu_T .* (s .^ 2 - timeline(n_tilde : n_bar) .^ 2) ...
+    + lambda_const * log(T_0) * (s - timeline(n_tilde : n_bar))));
+    X2_term1 = X2_term1 + func .* repmat(du, [1 length(gamma)]);
+    s = s + du;
+end   
+
+X2_term2 = X_coef .* exp((mu_U - beta) .* t_bar - mu_U .* timeline(n_tilde : n_bar) ...
+    + (exp((gamma - 1) .* Z) - 1) .* (lambda_max .* t_bar ...
+    - 0.5 .* lambda_const .* mu_T .* (t_tilde^2 - timeline(n_tilde : n_bar) .^ 2) ...
+    - lambda_const * log(T_0) * timeline(n_tilde : n_bar)));
+
+X(n_tilde : n_bar, :) = X2_term1 + X2_term2;
+
+X1_term1 = 1 ./ (mu_U - beta) .* exp(- beta .* timeline(1 : n_tilde - 1)) ...
+    .* (exp((mu_U - beta) .* (t_tilde - timeline(1 : n_tilde - 1))) - 1);
+
+t = timeline(1 : n_tilde - 1);
+n_steps = 100000;
+limit_min = t_tilde;
+limit_max = t_bar;
+du = (limit_max - limit_min) ./ n_steps;
+
+X1_term2 = 0;
+s = limit_min;
+for i = 1 : n_steps
+    func = exp((mu_U - beta) .* s - mu_U .* timeline(1 : n_tilde - 1) ...
+    + (exp((gamma - 1) .* Z) - 1) .* (0.5 .* lambda_const .* mu_T .* (s .^ 2 - t_tilde^2) ...
+    + lambda_const * log(T_0) * (s - t_tilde)));
+    X1_term2 = X1_term2 + func .* du;
+    s = s + du;
+end   
+
+X1_term3 = X_coef .* exp((mu_U - beta) .* t_bar - mu_U .* timeline(1 : n_tilde - 1) ...
+    + (exp((gamma - 1) .* Z) - 1) .* (lambda_max .* t_bar ...
+    - 0.5 .* lambda_const .* mu_T .* (t_tilde^2 + t_bar^2) - lambda_const * log(T_0) * t_tilde));
+
+X(1 : n_tilde - 1, :) = X1_term1 + X1_term2 + X1_term3;
+%%
+
+% Definition 1
+
+SCC_D1 = C .^ (- gamma) ./ (1 - gamma) ...
+    .* (1 ./ (beta - mu_U) .* exp(- beta .* timeline + (1 - gamma) .* Z .* dN_integral) - X);
+
+subplot(1, 2, 1);
+plot(time_years, SCC_D1(:, 1), 'LineWidth', 2, 'Color', [0.4660 0.6740 0.1880]);
+set(gca, 'xtick', [], 'LineWidth', 1, 'XColor', [0.3 0.3 0.3], 'YColor', [0.3 0.3 0.3], 'FontSize', 12);
+line([time_years(1) + round(t_tilde) time_years(1) + round(t_tilde)], [0 37], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+line([time_years(1) + round(t_bar) time_years(1) + round(t_bar)], [0 37], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \tilde t $$';
+text([time_years(1) + round(t_tilde) - 1], [-1.2], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \bar t $$';
+text([time_years(1) + round(t_bar) - 1], [-1.2], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+xlim([1930, 1930 + t_max]);
+ylim([0 37]);
+xlh = xlabel('Time'); 
+xlh.Position(2) = xlh.Position(2) - 1;
+ylabel('Social Cost of Carbon');
+title(sprintf('gamma = %0.1f', gamma(1)))
+
+subplot(1, 2, 2);
+plot(time_years, SCC_D1(:, 2), 'LineWidth', 2, 'Color', [0 0.4470 0.7410]);
+set(gca, 'xtick', [], 'LineWidth', 1, 'XColor', [0.3 0.3 0.3], 'YColor', [0.3 0.3 0.3], 'FontSize', 12);
+line([time_years(1) + round(t_tilde) time_years(1) + round(t_tilde)], [0 0.0012], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+line([time_years(1) + round(t_bar) time_years(1) + round(t_bar)], [0 0.0012], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \tilde t $$';
+text([time_years(1) + round(t_tilde) - 1], [-0.00004], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \bar t $$';
+text([time_years(1) + round(t_bar) - 1], [-0.00004], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+xlim([1930, 1930 + t_max]);
+ylim([0 0.0012]);
+xlh = xlabel('Time');
+xlh.Position(2) = xlh.Position(2) - 0.00003;
+title(sprintf('gamma = %0.1f', gamma(2)))
+%%
+
+% Definition 2
+
+SCC_D2 = C .^ (- gamma) ./ (1 - gamma) ...
+    .* (1 ./ (beta - mu_U - (exp((gamma - 1) .* Z) - 1) .* lambda) .* exp(- beta .* timeline) - X);
+
+subplot(1, 2, 1);
+plot(time_years, SCC_D2(:, 1), 'LineWidth', 2, 'Color', [0.4660 0.6740 0.1880]);
+set(gca, 'xtick', [], 'LineWidth', 1, 'XColor', [0.3 0.3 0.3], 'YColor', [0.3 0.3 0.3], 'FontSize', 12);
+line([time_years(1) + round(t_tilde) time_years(1) + round(t_tilde)], [0 37], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+line([time_years(1) + round(t_bar) time_years(1) + round(t_bar)], [0 37], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \tilde t $$';
+text([time_years(1) + round(t_tilde) - 1], [-1.2], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \bar t $$';
+text([time_years(1) + round(t_bar) - 1], [-1.2], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+xlim([1930, 1930 + t_max]);
+ylim([0 37]);
+xlh = xlabel('Time'); 
+xlh.Position(2) = xlh.Position(2) - 1;
+ylabel('Social Cost of Carbon');
+title(sprintf('gamma = %0.1f', gamma(1)))
+
+subplot(1, 2, 2);
+plot(time_years, SCC_D2(:, 2), 'LineWidth', 2, 'Color', [0 0.4470 0.7410]);
+set(gca, 'xtick', [], 'LineWidth', 1, 'XColor', [0.3 0.3 0.3], 'YColor', [0.3 0.3 0.3], 'FontSize', 12);
+line([time_years(1) + round(t_tilde) time_years(1) + round(t_tilde)], [0 0.0012], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+line([time_years(1) + round(t_bar) time_years(1) + round(t_bar)], [0 0.0012], ...
+    'LineWidth', 1, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \tilde t $$';
+text([time_years(1) + round(t_tilde) - 1], [-0.00004], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+str = '$$ \bar t $$';
+text([time_years(1) + round(t_bar) - 1], [-0.00004], str, 'Interpreter', 'latex', ...
+    'FontSize', 14, 'Color', [0.8350 0.0780 0.1840]);
+xlim([1930, 1930 + t_max]);
+ylim([0 0.0012]);
+xlh = xlabel('Time');
+xlh.Position(2) = xlh.Position(2) - 0.00003;
+title(sprintf('gamma = %0.1f', gamma(2)))
+
+
+
+
+
